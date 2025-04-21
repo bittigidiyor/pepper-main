@@ -1,0 +1,33 @@
+import serial
+
+def send_drive_command(port, left_speed, right_speed):
+    # Create a serial connection
+    ser = serial.Serial(port, baudrate=9600, timeout=1)
+
+    # Clamp speed to 16-bit signed int range
+    left = max(-32768, min(32767, left_speed))
+    right = max(-32768, min(32767, right_speed))
+
+    # Packet base
+    sync = 0xFA
+    cmd = 0x44  # 'D'
+    args = left.to_bytes(2, 'big', signed=True) + right.to_bytes(2, 'big', signed=True)
+    length = len(args) + 1  # command + args
+
+    # Checksum
+    checksum = cmd
+    for b in args:
+        checksum ^= b
+
+    # Full packet
+    packet = bytes([sync, length, cmd]) + args + bytes([checksum])
+    
+    # Send
+    ser.write(packet)
+    print(f"Sent: {[hex(b) for b in packet]}")
+
+    # Optional: read response
+    response = ser.read(20)
+    print(f"Received: {response}")
+    
+    ser.close()
