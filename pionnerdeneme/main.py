@@ -1,34 +1,54 @@
 import serial
 import time
-from setvel2 import SetVel2
+from setvel import SetVel
 from heartbeat import Heartbeat
 
-# --- Ubuntu için seri port ayarı ---
-# Gerekirse 'ls /dev/tty*' ile doğru portu bul
+# --- Seri port ayarı ---
 ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
 
-# --- Heartbeat başlat ---
+# --- Heartbeat objesi oluştur ---
 hb = Heartbeat()
 ser.write(bytearray(hb.get_packet()))
-print("Başlangıç heartbeat gönderildi")
+print("[→] Heartbeat gönderildi")
 
-# --- İleri yönde hareket verelim (her iki motor) ---
-vel2 = SetVel2(150, 150)  # Sol ve sağ motor: 150 mm/s
-ser.write(bytearray(vel2.get_packet()))
-print("Robot ileri gidiyor")
+# --- Cevap bekleyelim (ilk cevap 1-2 byte olabilir) ---
+time.sleep(0.5)
+if ser.in_waiting:
+    response = ser.read(ser.in_waiting)
+    print("[←] Robot yanıt verdi:", [hex(b) for b in response])
+else:
+    print("[!] Robot yanıt vermedi (şimdilik)")
 
-# --- 2 saniye hareket ve heartbeat ---
-for _ in range(2):
+# --- Robotu ileri gönderelim ---
+vel_cmd = SetVel(150)
+ser.write(bytearray(vel_cmd.get_packet()))
+print("[→] setVel(150) gönderildi")
+
+# --- 2 saniye boyunca heartbeat + cevap dinleme ---
+for i in range(2):
     ser.write(bytearray(hb.get_packet()))
-    time.sleep(1)
+    print("[→] Heartbeat gönderildi")
+
+    time.sleep(0.5)
+
+    if ser.in_waiting:
+        response = ser.read(ser.in_waiting)
+        print("[←] Robot yanıt verdi:", [hex(b) for b in response])
+    else:
+        print("[…] Henüz yanıt yok")
+
+    time.sleep(0.5)
 
 # --- Robotu durdur ---
-stop = SetVel2(0, 0)
-ser.write(bytearray(stop.get_packet()))
-print("Robot durduruldu")
+stop_cmd = SetVel(0)
+ser.write(bytearray(stop_cmd.get_packet()))
+print("[→] setVel(0) (dur) gönderildi")
 
-# --- Heartbeat döngüsü ---
-while True:
-    ser.write(bytearray(hb.get_packet()))
-    print("Heartbeat gönderildi")
-    time.sleep(1)
+# --- Kapanış heartbeat + cevap ---
+ser.write(bytearray(hb.get_packet()))
+time.sleep(0.5)
+if ser.in_waiting:
+    response = ser.read(ser.in_waiting)
+    print("[←] Robot son yanıtı:", [hex(b) for b in response])
+else:
+    print("[!] Son paket yanıtı alınamadı")
